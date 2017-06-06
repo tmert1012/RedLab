@@ -2,10 +2,14 @@ group 'com.isidorefarm.redlab'
 version '1.0-SNAPSHOT'
 
 apply plugin: 'java'
+apply plugin: 'application'
+mainClassName = 'com.isidorefarm.redlab.RedLab'
 
 sourceCompatibility = 1.8
 
 jar {
+    baseName = 'redlab'
+    version = '1.0.0'
     manifest {
         attributes 'Main-Class': 'com.isidorefarm.redlab.RedLab'
     }
@@ -17,4 +21,7 @@ repositories {
 
 dependencies {
     testCompile group: 'junit', name: 'junit', version: '4.12'
+    compile 'com.taskadapter:redmine-java-api:3.0.0'
+    compile 'com.google.code.gson:gson:2.8.1'
+    compile 'commons-io:commons-io:2.5'
 }
