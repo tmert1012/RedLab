@@ -12,14 +12,14 @@ import java.util.List;
 public class Config {
 
     private boolean safeMode;
-    private Redmine redmine;
-    private GitLab gitlab;
+    private RedmineOptions redmineOptions;
+    private GitLabOptions gitLabOptions;
     private List<ProjectMap> projectMapList;
 
-    public Config(boolean safeMode, Redmine redmine, GitLab gitlab, List<ProjectMap> projectMapList) {
+    public Config(boolean safeMode, RedmineOptions redmineOptions, GitLabOptions gitLabOptions, List<ProjectMap> projectMapList) {
         this.safeMode = safeMode;
-        this.redmine = redmine;
-        this.gitlab = gitlab;
+        this.redmineOptions = redmineOptions;
+        this.gitLabOptions = gitLabOptions;
         this.projectMapList = projectMapList;
     }
 
@@ -34,12 +34,12 @@ public class Config {
         return safeMode;
     }
 
-    public Redmine getRedmine() {
-        return redmine;
+    public RedmineOptions getRedmineOptions() {
+        return redmineOptions;
     }
 
-    public GitLab getGitlab() {
-        return gitlab;
+    public GitLabOptions getGitLabOptions() {
+        return gitLabOptions;
     }
 
     public List<ProjectMap> getProjectMapList() {
@@ -50,8 +50,8 @@ public class Config {
     public String toString() {
         return "Config{" +
                 "safeMode=" + safeMode +
-                ", redmine=" + redmine +
-                ", gitlab=" + gitlab +
+                ", redmineOptions=" + redmineOptions +
+                ", gitLabOptions=" + gitLabOptions +
                 ", projectMapList=" + projectMapList +
                 '}';
     }

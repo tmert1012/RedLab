@@ -24,4 +24,5 @@ dependencies {
     compile 'com.taskadapter:redmine-java-api:3.0.0'
     compile 'com.google.code.gson:gson:2.8.1'
     compile 'commons-io:commons-io:2.5'
+    compile 'org.gitlab:java-gitlab-api:1.2.8'
 }

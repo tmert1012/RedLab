@@ -1,11 +1,11 @@
 package com.isidorefarm.redlab.config;
 
-public class GitLab {
+public class GitLabOptions {
 
     private String apiKey;
     private String baseURL;
 
-    public GitLab(String apiKey, String baseURL) {
+    public GitLabOptions(String apiKey, String baseURL) {
         this.apiKey = apiKey;
         this.baseURL = baseURL;
     }
@@ -20,7 +20,7 @@ public class GitLab {
 
     @Override
     public String toString() {
-        return "GitLab{" +
+        return "GitLabOptions{" +
                 "apiKey='" + apiKey + '\'' +
                 ", baseURL='" + baseURL + '\'' +
                 '}';

@@ -1,12 +1,12 @@
 package com.isidorefarm.redlab.config;
 
 
-public class Redmine {
+public class RedmineOptions {
 
     private String apiKey;
     private String baseURL;
 
-    public Redmine(String apiKey, String baseURL) {
+    public RedmineOptions(String apiKey, String baseURL) {
         this.apiKey = apiKey;
         this.baseURL = baseURL;
     }
@@ -21,7 +21,7 @@ public class Redmine {
 
     @Override
     public String toString() {
-        return "Redmine{" +
+        return "RedmineOptions{" +
                 "apiKey='" + apiKey + '\'' +
                 ", baseURL='" + baseURL + '\'' +
                 '}';

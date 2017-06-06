@@ -1,42 +1,46 @@
 package com.isidorefarm.redlab;
 
 
+import com.isidorefarm.redlab.api.RedmineAPI;
 import com.isidorefarm.redlab.config.ProjectMap;
 import com.taskadapter.redmineapi.RedmineException;
-import com.taskadapter.redmineapi.RedmineManager;
-import com.taskadapter.redmineapi.RedmineManagerFactory;
 import com.taskadapter.redmineapi.bean.Issue;
+import com.taskadapter.redmineapi.bean.Project;
 
 import java.util.List;
 
 public class MigrateIssues {
 
-    private RedmineManager redmineManager;
-
+    private RedmineAPI redmineAPI;
 
     public MigrateIssues() {
-        redmineManager = RedmineManagerFactory.createWithApiKey(RedLab.config.getRedmine().getBaseURL(), RedLab.config.getRedmine().getApiKey());
+        redmineAPI = null;
     }
 
     public void run() throws RedmineException {
+        redmineAPI = new RedmineAPI();
+
         List<Issue> redmineIssues = null;
-
+        Project redmineProject = null;
         for (ProjectMap projectMap : RedLab.config.getProjectMapList()) {
-            redmineIssues = getRedmineIssues(projectMap.getRedmineID());
+            RedLab.logInfo("\n\nprocessing project: " + projectMap.getRedmineKey());
 
+            // get project by key
+            redmineProject = redmineAPI.getProjectByKey(projectMap.getRedmineKey());
+            if (redmineProject == null)
+                continue;
+
+            // get all issues for project
+            redmineIssues = redmineAPI.getIssues(redmineProject.getId());
+
+            // debug
             for (Issue redmineIssue : redmineIssues) {
-
+                RedLab.logInfo("issue: " + redmineIssue.getId() + " - " + redmineIssue.getSubject());
             }
 
         }
 
     }
 
-    private List<Issue> getRedmineIssues(String projectKey) throws RedmineException {
-        Integer queryId = null; // any
-
-        return redmineManager.getIssueManager().getIssues(projectKey, queryId);
-
-    }
 
 }

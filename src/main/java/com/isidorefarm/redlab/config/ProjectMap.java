@@ -3,27 +3,27 @@ package com.isidorefarm.redlab.config;
 
 public class ProjectMap {
 
-    private String redmineID;
-    private String gitlabID;
+    private String redmineKey;
+    private String gitLabKey;
 
-    public ProjectMap(String redmineID, String gitlabID) {
-        this.redmineID = redmineID;
-        this.gitlabID = gitlabID;
+    public ProjectMap(String redmineKey, String gitLabKey) {
+        this.redmineKey = redmineKey;
+        this.gitLabKey = gitLabKey;
     }
 
-    public String getRedmineID() {
-        return redmineID;
+    public String getRedmineKey() {
+        return redmineKey;
     }
 
-    public String getGitlabID() {
-        return gitlabID;
+    public String getGitLabKey() {
+        return gitLabKey;
     }
 
     @Override
     public String toString() {
         return "ProjectMap{" +
-                "redmineID='" + redmineID + '\'' +
-                ", gitlabID='" + gitlabID + '\'' +
+                "redmineKey='" + redmineKey + '\'' +
+                ", gitLabKey='" + gitLabKey + '\'' +
                 '}';
     }
 }
