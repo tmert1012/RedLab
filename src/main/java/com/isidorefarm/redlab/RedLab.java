@@ -27,8 +27,8 @@ public class RedLab extends CommandLineProject {
             logInfo(config.toString());
 
             // copy redmine issues to gitlab, based on Config
-            MigrateIssues migrateIssues = new MigrateIssues();
-            migrateIssues.run();
+            Migrate migrate = new Migrate();
+            migrate.run();
 
         } catch (Exception e) {
             e.printStackTrace();

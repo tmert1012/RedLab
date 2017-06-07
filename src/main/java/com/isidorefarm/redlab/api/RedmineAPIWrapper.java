@@ -7,24 +7,31 @@ import com.taskadapter.redmineapi.RedmineManager;
 import com.taskadapter.redmineapi.RedmineManagerFactory;
 import com.taskadapter.redmineapi.bean.Issue;
 import com.taskadapter.redmineapi.bean.Project;
+import com.taskadapter.redmineapi.bean.User;
+import com.taskadapter.redmineapi.bean.Version;
 import com.taskadapter.redmineapi.internal.ResultsWrapper;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-public class RedmineAPI {
+public class RedmineAPIWrapper {
 
     final private int LIMIT = 100;
 
     private RedmineManager redmineManager;
-    private List<Project> redmineProjects;
+    private List<Project> projects;
+    private List<User> users;
 
-    public RedmineAPI() throws RedmineException {
+    public RedmineAPIWrapper() throws RedmineException {
         redmineManager = RedmineManagerFactory.createWithApiKey(RedLab.config.getRedmineOptions().getBaseURL(), RedLab.config.getRedmineOptions().getApiKey());
 
-        // load all redmine projects
-        redmineProjects = redmineManager.getProjectManager().getProjects();
+        projects = redmineManager.getProjectManager().getProjects();
+        users = redmineManager.getUserManager().getUsers();
+    }
+
+    public List<Version> getVersions(int projectID) throws RedmineException {
+        return redmineManager.getProjectManager().getVersions(projectID);
     }
 
     public List<Issue> getIssues(int projectID) throws RedmineException {
@@ -58,11 +65,21 @@ public class RedmineAPI {
 
     public Project getProjectByKey(String projectKey) {
 
-        for (Project project : redmineProjects)
+        for (Project project : projects)
             if (project.getIdentifier().equals(projectKey))
                 return project;
 
         RedLab.logInfo("Unable to lookup project by projectKey: " + projectKey + ", skipping.");
+        return null;
+    }
+
+    public User getAssignee(int assigneeId) {
+
+        for (User user : users)
+            if (user.getId() == assigneeId)
+                return user;
+
+        RedLab.logInfo("Unable to lookup assignee: " + assigneeId + ", skipping.");
         return null;
     }
 
