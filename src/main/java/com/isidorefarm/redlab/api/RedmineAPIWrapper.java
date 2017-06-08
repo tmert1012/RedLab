@@ -40,6 +40,7 @@ public class RedmineAPIWrapper {
         HashMap<String, String> params = new HashMap<String, String>();
         params.put("project_id", Integer.toString(projectID));
         params.put("status_id", "*");
+        params.put("include", "journals");
         params.put("offset", "0");
         params.put("limit", Integer.toString(LIMIT));
 

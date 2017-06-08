@@ -3,10 +3,7 @@ package com.isidorefarm.redlab.api;
 
 import com.isidorefarm.redlab.RedLab;
 import org.gitlab.api.GitlabAPI;
-import org.gitlab.api.models.GitlabIssue;
-import org.gitlab.api.models.GitlabMilestone;
-import org.gitlab.api.models.GitlabProject;
-import org.gitlab.api.models.GitlabUser;
+import org.gitlab.api.models.*;
 
 import java.io.IOException;
 import java.io.Serializable;
@@ -64,6 +61,18 @@ public class GitLabAPIWrapper {
 
     public GitlabMilestone createMilestone(Serializable projectId, String title, String description, Date dueDate) throws IOException {
         return gitlabAPI.createMilestone(projectId, title, description, dueDate);
+    }
+
+    public GitlabNote createNote(Serializable projectId, Integer issueId, String message) throws IOException {
+        return gitlabAPI.createNote(projectId, issueId, message);
+    }
+
+    public List<GitlabIssue> getIssues(GitlabProject gitlabProject) throws IOException {
+        return gitlabAPI.getIssues(gitlabProject);
+    }
+
+    public List<GitlabNote> getNotes(GitlabIssue gitlabIssue) throws IOException {
+        return gitlabAPI.getNotes(gitlabIssue);
     }
 
 }
