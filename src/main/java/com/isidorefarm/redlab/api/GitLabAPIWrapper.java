@@ -2,6 +2,7 @@ package com.isidorefarm.redlab.api;
 
 
 import com.isidorefarm.redlab.RedLab;
+import com.sun.org.apache.regexp.internal.RE;
 import org.gitlab.api.GitlabAPI;
 import org.gitlab.api.models.*;
 
@@ -52,19 +53,74 @@ public class GitLabAPIWrapper {
     }
 
     public GitlabIssue createIssue(int projectId, int assigneeId, int milestoneId, String labels, String description, String title) throws IOException {
-        return gitlabAPI.createIssue(projectId, assigneeId, milestoneId, labels, description, title);
+        GitlabIssue gitlabIssue;
+
+        if (RedLab.config.isSafeMode()) {
+            String[] lablesList = {labels};
+
+            GitlabMilestone milestone = new GitlabMilestone();
+            milestone.setId(milestoneId);
+
+            GitlabUser user = new GitlabUser();
+            user.setId(assigneeId);
+
+            gitlabIssue = new GitlabIssue();
+            gitlabIssue.setId(-1);
+            gitlabIssue.setProjectId(projectId);
+            gitlabIssue.setAssignee(user);
+            gitlabIssue.setMilestone(milestone);
+            gitlabIssue.setLabels(lablesList);
+            gitlabIssue.setDescription(description);
+            gitlabIssue.setTitle(title);
+        }
+        else {
+            gitlabIssue = gitlabAPI.createIssue(projectId, assigneeId, milestoneId, labels, description, title);
+        }
+
+        RedLab.logInfo("Added GitLab Issue: " + gitlabIssue.toString());
+
+        return gitlabIssue;
     }
 
     public List<GitlabMilestone> getMilestones(Serializable projectId) throws IOException {
         return gitlabAPI.getMilestones(projectId);
     }
 
-    public GitlabMilestone createMilestone(Serializable projectId, String title, String description, Date dueDate) throws IOException {
-        return gitlabAPI.createMilestone(projectId, title, description, dueDate);
+    public GitlabMilestone createMilestone(int projectId, String title, String description, Date dueDate) throws IOException {
+        GitlabMilestone milestone;
+
+        if (RedLab.config.isSafeMode()) {
+            milestone = new GitlabMilestone();
+            milestone.setId(-1);
+            milestone.setProjectId(projectId);
+            milestone.setTitle(title);
+            milestone.setDescription(description);
+            milestone.setDueDate(dueDate);
+        }
+        else {
+            milestone = gitlabAPI.createMilestone(projectId, title, description, dueDate);
+        }
+
+        RedLab.logInfo("Added GitLab Milestone: " + milestone.toString());
+
+        return milestone;
     }
 
-    public GitlabNote createNote(Serializable projectId, Integer issueId, String message) throws IOException {
-        return gitlabAPI.createNote(projectId, issueId, message);
+    public GitlabNote createNote(GitlabIssue gitlabIssue, String message) throws IOException {
+        GitlabNote gitlabNote;
+
+        if (RedLab.config.isSafeMode()) {
+            gitlabNote = new GitlabNote();
+            gitlabNote.setId(-1);
+            gitlabNote.setBody(message);
+        }
+        else {
+            gitlabNote = gitlabAPI.createNote(gitlabIssue, message);
+        }
+
+        RedLab.logInfo("Added GitLab Note: " + gitlabNote.toString());
+
+        return gitlabNote;
     }
 
     public List<GitlabIssue> getIssues(GitlabProject gitlabProject) throws IOException {
