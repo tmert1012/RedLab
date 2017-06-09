@@ -186,8 +186,7 @@ public class Migrate {
 
             // submit note
             gitLabAPIWrapper.createNote(
-                    gitlabProject.getId(),
-                    gitlabIssue.getId(),
+                    gitlabIssue,
                     message
             );
         }

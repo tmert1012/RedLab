@@ -2,12 +2,11 @@ package com.isidorefarm.redlab.api;
 
 
 import com.isidorefarm.redlab.RedLab;
-import com.sun.org.apache.regexp.internal.RE;
+import com.isidorefarm.redlab.entities.SafeModeEntities;
 import org.gitlab.api.GitlabAPI;
 import org.gitlab.api.models.*;
 
 import java.io.IOException;
-import java.io.Serializable;
 import java.util.Date;
 import java.util.List;
 
@@ -16,6 +15,7 @@ public class GitLabAPIWrapper {
     private GitlabAPI gitlabAPI;
     private List<GitlabProject> projects;
     private List<GitlabUser> users;
+    private SafeModeEntities safeModeEntities; // for safe mode only
 
 
     public GitLabAPIWrapper() throws IOException {
@@ -23,6 +23,7 @@ public class GitLabAPIWrapper {
 
         projects = gitlabAPI.getProjects();
         users = gitlabAPI.getUsers();
+        safeModeEntities = new SafeModeEntities();
     }
 
     public GitlabProject getProjectByKey(String gitLabKey) {
@@ -72,6 +73,8 @@ public class GitLabAPIWrapper {
             gitlabIssue.setLabels(lablesList);
             gitlabIssue.setDescription(description);
             gitlabIssue.setTitle(title);
+
+            safeModeEntities.addGitlabIssue(gitlabIssue);
         }
         else {
             gitlabIssue = gitlabAPI.createIssue(projectId, assigneeId, milestoneId, labels, description, title);
@@ -82,8 +85,12 @@ public class GitLabAPIWrapper {
         return gitlabIssue;
     }
 
-    public List<GitlabMilestone> getMilestones(Serializable projectId) throws IOException {
-        return gitlabAPI.getMilestones(projectId);
+    public List<GitlabMilestone> getMilestones(int projectId) throws IOException {
+
+        if (RedLab.config.isSafeMode())
+            return safeModeEntities.getGitlabMilestones(projectId);
+        else
+            return gitlabAPI.getMilestones(projectId);
     }
 
     public GitlabMilestone createMilestone(int projectId, String title, String description, Date dueDate) throws IOException {
@@ -96,6 +103,8 @@ public class GitLabAPIWrapper {
             milestone.setTitle(title);
             milestone.setDescription(description);
             milestone.setDueDate(dueDate);
+
+            safeModeEntities.addGitlabMileStone(milestone);
         }
         else {
             milestone = gitlabAPI.createMilestone(projectId, title, description, dueDate);
@@ -113,6 +122,8 @@ public class GitLabAPIWrapper {
             gitlabNote = new GitlabNote();
             gitlabNote.setId(-1);
             gitlabNote.setBody(message);
+
+            safeModeEntities.addGitlabNote(gitlabIssue.getId(), gitlabNote);
         }
         else {
             gitlabNote = gitlabAPI.createNote(gitlabIssue, message);
@@ -124,11 +135,19 @@ public class GitLabAPIWrapper {
     }
 
     public List<GitlabIssue> getIssues(GitlabProject gitlabProject) throws IOException {
-        return gitlabAPI.getIssues(gitlabProject);
+
+        if (RedLab.config.isSafeMode())
+            return safeModeEntities.getGitlabIssues();
+        else
+            return gitlabAPI.getIssues(gitlabProject);
     }
 
     public List<GitlabNote> getNotes(GitlabIssue gitlabIssue) throws IOException {
-        return gitlabAPI.getNotes(gitlabIssue);
+
+        if (RedLab.config.isSafeMode())
+            return safeModeEntities.getGitlabNotes(gitlabIssue.getId());
+        else
+            return gitlabAPI.getNotes(gitlabIssue);
     }
 
 }
