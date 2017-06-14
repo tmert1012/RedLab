@@ -8,6 +8,7 @@ import org.gitlab.api.models.*;
 
 import java.io.IOException;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 
 public class GitLabAPIWrapper {
@@ -26,33 +27,6 @@ public class GitLabAPIWrapper {
         safeModeEntities = new SafeModeEntities();
     }
 
-    public GitlabProject getProjectByKey(String gitLabKey) {
-
-        for (GitlabProject project : projects) {
-            if (project.getName().equals(gitLabKey) || project.getNameWithNamespace().equals(gitLabKey))
-                return project;
-        }
-
-        RedLab.logInfo("Unable to lookup GitLab project from key: " + gitLabKey);
-        return null;
-
-    }
-
-    public List<GitlabUser> getUsers() {
-        return users;
-    }
-
-    public GitlabUser getDefaultAssignee() {
-
-        for (GitlabUser gitlabUser : users) {
-            if (gitlabUser.getUsername().equals(RedLab.config.getGitLabOptions().getDefaultAssigneeUsername()) )
-                return gitlabUser;
-        }
-
-        RedLab.logInfo("Unable to lookup GitLab default assignee: " + RedLab.config.getGitLabOptions().getDefaultAssigneeUsername());
-        return null;
-    }
-
     public GitlabIssue createIssue(int projectId, int assigneeId, int milestoneId, String labels, String description, String title) throws IOException {
         GitlabIssue gitlabIssue;
 
@@ -66,7 +40,6 @@ public class GitLabAPIWrapper {
             user.setId(assigneeId);
 
             gitlabIssue = new GitlabIssue();
-            gitlabIssue.setId(-1);
             gitlabIssue.setProjectId(projectId);
             gitlabIssue.setAssignee(user);
             gitlabIssue.setMilestone(milestone);
@@ -80,17 +53,42 @@ public class GitLabAPIWrapper {
             gitlabIssue = gitlabAPI.createIssue(projectId, assigneeId, milestoneId, labels, description, title);
         }
 
-        RedLab.logInfo("Added GitLab Issue: " + gitlabIssue.toString());
+        RedLab.logInfo("added gitlab issue: '" + gitlabIssue.getTitle() + "' ("  + gitlabIssue.getId() + ")");
 
         return gitlabIssue;
     }
 
-    public List<GitlabMilestone> getMilestones(int projectId) throws IOException {
+    public GitlabIssue editIssue(int projectId, int issueId, int assigneeId, int milestoneId, java.lang.String labels, java.lang.String description, java.lang.String title, GitlabIssue.Action action) throws IOException {
+            GitlabIssue gitlabIssue;
 
-        if (RedLab.config.isSafeMode())
-            return safeModeEntities.getGitlabMilestones(projectId);
-        else
-            return gitlabAPI.getMilestones(projectId);
+            if (RedLab.config.isSafeMode()) {
+
+                gitlabIssue = safeModeEntities.getGitlabIssue(issueId);
+
+                String[] lablesList = {labels};
+
+                GitlabMilestone milestone = new GitlabMilestone();
+                milestone.setId(milestoneId);
+
+                GitlabUser user = new GitlabUser();
+                user.setId(assigneeId);
+
+                gitlabIssue.setProjectId(projectId);
+                gitlabIssue.setId(issueId);
+                gitlabIssue.setAssignee(user);
+                gitlabIssue.setMilestone(milestone);
+                gitlabIssue.setLabels(lablesList);
+                gitlabIssue.setDescription(description);
+                gitlabIssue.setTitle(title);
+
+            }
+            else {
+                gitlabIssue = gitlabAPI.editIssue(projectId, issueId, assigneeId, milestoneId, labels, description, title, action);
+            }
+
+            RedLab.logInfo("updated gitlab issue: '" + gitlabIssue.getTitle() + "' ("  + gitlabIssue.getId() + ")");
+
+            return gitlabIssue;
     }
 
     public GitlabMilestone createMilestone(int projectId, String title, String description, Date dueDate) throws IOException {
@@ -98,7 +96,6 @@ public class GitLabAPIWrapper {
 
         if (RedLab.config.isSafeMode()) {
             milestone = new GitlabMilestone();
-            milestone.setId(-1);
             milestone.setProjectId(projectId);
             milestone.setTitle(title);
             milestone.setDescription(description);
@@ -110,7 +107,7 @@ public class GitLabAPIWrapper {
             milestone = gitlabAPI.createMilestone(projectId, title, description, dueDate);
         }
 
-        RedLab.logInfo("Added GitLab Milestone: " + milestone.toString());
+        RedLab.logInfo("added gitlab milestone: '" + milestone.getTitle() + "' (" + milestone.getId() + ")");
 
         return milestone;
     }
@@ -120,7 +117,6 @@ public class GitLabAPIWrapper {
 
         if (RedLab.config.isSafeMode()) {
             gitlabNote = new GitlabNote();
-            gitlabNote.setId(-1);
             gitlabNote.setBody(message);
 
             safeModeEntities.addGitlabNote(gitlabIssue.getId(), gitlabNote);
@@ -129,25 +125,88 @@ public class GitLabAPIWrapper {
             gitlabNote = gitlabAPI.createNote(gitlabIssue, message);
         }
 
-        RedLab.logInfo("Added GitLab Note: " + gitlabNote.toString());
+        RedLab.logInfo("added gitlab note. ("  + gitlabNote.getId() + ")");
 
         return gitlabNote;
     }
 
-    public List<GitlabIssue> getIssues(GitlabProject gitlabProject) throws IOException {
+    public GitlabProject getProjectByKey(String gitLabKey) {
 
-        if (RedLab.config.isSafeMode())
+        for (GitlabProject project : projects) {
+
+            if (project.getName().equals(gitLabKey) || project.getPathWithNamespace().equals(gitLabKey)) {
+                RedLab.logInfo("found gitlab project '" + project.getName() + "' with '" + gitLabKey + "'");
+                return project;
+            }
+        }
+
+        RedLab.logInfo("unable to lookup gitlab project from key: " + gitLabKey);
+        return null;
+
+    }
+
+    public List<GitlabUser> getUsers() {
+        return users;
+    }
+
+    public GitlabUser getDefaultAssignee() {
+
+        for (GitlabUser gitlabUser : users) {
+            if (gitlabUser.getUsername().equals(RedLab.config.getGitLabOptions().getDefaultAssigneeUsername()) ) {
+                RedLab.logInfo("found gitlab default assignee: " + gitlabUser.getUsername());
+                return gitlabUser;
+            }
+        }
+
+        RedLab.logInfo("unable to lookup gitlab default assignee: " + RedLab.config.getGitLabOptions().getDefaultAssigneeUsername());
+        return null;
+    }
+
+    public List<GitlabMilestone> getMilestones(int projectId, boolean returnSafeModeEntities) throws IOException {
+
+        if (returnSafeModeEntities)
+            return safeModeEntities.getGitlabMilestones(projectId);
+        else
+            return gitlabAPI.getMilestones(projectId);
+    }
+
+    public List<GitlabIssue> getIssues(GitlabProject gitlabProject, boolean returnSafeModeEntities) throws IOException {
+
+        if (returnSafeModeEntities)
             return safeModeEntities.getGitlabIssues();
         else
             return gitlabAPI.getIssues(gitlabProject);
     }
 
-    public List<GitlabNote> getNotes(GitlabIssue gitlabIssue) throws IOException {
+    public List<GitlabNote> getNotes(GitlabIssue gitlabIssue, boolean returnSafeModeEntities) throws IOException {
 
-        if (RedLab.config.isSafeMode())
+        if (returnSafeModeEntities)
             return safeModeEntities.getGitlabNotes(gitlabIssue.getId());
         else
             return gitlabAPI.getNotes(gitlabIssue);
+    }
+
+    // key milestone title
+    public HashMap<String, GitlabMilestone> getMilestoneHashMap(GitlabProject gitlabProject, boolean returnSafeModeEntities) throws IOException {
+        List<GitlabMilestone> milestones = getMilestones(gitlabProject.getId(), returnSafeModeEntities);
+
+        // key is version title or milestone name
+        HashMap<String, GitlabMilestone> milestoneHashMap = new HashMap<String, GitlabMilestone>();
+        for (GitlabMilestone milestone : milestones)
+            milestoneHashMap.put(milestone.getTitle(), milestone);
+
+        return milestoneHashMap;
+    }
+
+    // key: issue title
+    public HashMap<String, GitlabIssue> getGitlabIssueHashMap(GitlabProject gitlabProject, boolean returnSafeModeEntities) throws IOException {
+        List<GitlabIssue> issues = getIssues(gitlabProject, returnSafeModeEntities);
+
+        HashMap<String, GitlabIssue> map = new HashMap<String, GitlabIssue>();
+        for (GitlabIssue issue : issues)
+            map.put(issue.getTitle(), issue);
+
+        return map;
     }
 
 }

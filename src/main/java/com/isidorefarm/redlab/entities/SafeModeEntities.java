@@ -21,6 +21,10 @@ public class SafeModeEntities {
     }
 
     public void addGitlabIssue(GitlabIssue issue) {
+
+        // set fake id
+        issue.setId( gitlabIssues.size() );
+
         gitlabIssues.add(issue);
     }
 
@@ -28,6 +32,9 @@ public class SafeModeEntities {
 
         if (!milestoneHashMap.containsKey(milestone.getProjectId()))
             milestoneHashMap.put(milestone.getProjectId(), new ArrayList<GitlabMilestone>());
+
+        // set fake id
+        milestone.setId( milestoneHashMap.get(milestone.getProjectId()).size() );
 
         milestoneHashMap.get(milestone.getProjectId()).add(milestone);
     }
@@ -37,6 +44,9 @@ public class SafeModeEntities {
         if (!notesHashMap.containsKey(issueID))
             notesHashMap.put(issueID, new ArrayList<GitlabNote>());
 
+        // set fake id
+        note.setId( notesHashMap.get(issueID).size() );
+
         notesHashMap.get(issueID).add(note);
     }
 
@@ -44,11 +54,27 @@ public class SafeModeEntities {
         return gitlabIssues;
     }
 
+    public GitlabIssue getGitlabIssue(int issueID) {
+        for (GitlabIssue issue : gitlabIssues)
+            if (issue.getId() == issueID)
+                return issue;
+
+        return null;
+    }
+
     public ArrayList<GitlabMilestone> getGitlabMilestones(int projectID) {
+
+        if (!milestoneHashMap.containsKey(projectID))
+            return new ArrayList<GitlabMilestone>();
+
         return milestoneHashMap.get(projectID);
     }
 
     public ArrayList<GitlabNote> getGitlabNotes(int issueID) {
+
+        if (!notesHashMap.containsKey(issueID))
+            return new ArrayList<GitlabNote>();
+
         return notesHashMap.get(issueID);
     }
 }
