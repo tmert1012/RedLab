@@ -10,6 +10,7 @@ import com.taskadapter.redmineapi.bean.*;
 import com.taskadapter.redmineapi.internal.ResultsWrapper;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 
@@ -22,18 +23,24 @@ public class RedmineAPIWrapper {
     private HashMap<Integer, User> userHashMap;
     private HashMap<Integer, IssueStatus> issueStatusHashMap;
 
+
     public RedmineAPIWrapper() throws RedmineException {
         redmineManager = RedmineManagerFactory.createWithApiKey(RedLab.config.getRedmineOptions().getBaseURL(), RedLab.config.getRedmineOptions().getApiKey());
 
         projects = redmineManager.getProjectManager().getProjects();
 
         userHashMap = new HashMap<Integer, User>();
-        for (User user : redmineManager.getUserManager().getUsers())
+        for (User user : redmineManager.getUserManager().getUsers()) {
+            if (RedLab.config.isDebugMode()) RedLab.logger.logInfo("adding user: " + user.getId() + ", " + user.getFullName());
             userHashMap.put(user.getId(), user);
+        }
 
         issueStatusHashMap = new HashMap<Integer, IssueStatus>();
-        for (IssueStatus issueStatus : redmineManager.getIssueManager().getStatuses())
+        for (IssueStatus issueStatus : redmineManager.getIssueManager().getStatuses()) {
+            if (RedLab.config.isDebugMode()) RedLab.logger.logInfo("adding issueStatus: " + issueStatus.getId() + ", " + issueStatus.getName());
             issueStatusHashMap.put(issueStatus.getId(), issueStatus);
+        }
+
     }
 
     public List<Version> getVersions(int projectID) throws RedmineException {
@@ -57,7 +64,7 @@ public class RedmineAPIWrapper {
             resultsWrapper = redmineManager.getIssueManager().getIssues(params);
 
             issueCount = resultsWrapper.getResultsNumber();
-            RedLab.logInfo("getting issues. iteration: " + callCount + ", issue count: " + issueCount);
+            RedLab.logger.logInfo("getting issues. iteration: " + callCount + ", issue count: " + issueCount);
 
             issues.addAll(resultsWrapper.getResults());
 
@@ -70,18 +77,18 @@ public class RedmineAPIWrapper {
     }
 
     public Issue getIssueById(int issueId) throws RedmineException {
-        return redmineManager.getIssueManager().getIssueById(issueId, Include.journals);
+        return redmineManager.getIssueManager().getIssueById(issueId, Include.journals, Include.relations, Include.changesets, Include.watchers);
     }
 
     public Project getProjectByKey(String projectKey) {
 
         for (Project project : projects)
             if (project.getIdentifier().equals(projectKey)) {
-                RedLab.logInfo("found redmine project: " + project.getName() + " using projectKey: " + projectKey);
+                RedLab.logger.logInfo("found redmine project: '" + project.getName() + "'");
                 return project;
             }
 
-        RedLab.logInfo("unable to lookup redmine project by projectKey: " + projectKey + ", skipping.");
+        RedLab.logger.logInfo("unable to lookup redmine project by projectKey: " + projectKey + ", skipping.");
         return null;
     }
 
@@ -89,17 +96,17 @@ public class RedmineAPIWrapper {
 
         // assignee not set in ticket
         if (redmineIssue == null) {
-            RedLab.logInfo("assignee not set in redmine ticket, skipping");
+            RedLab.logger.logInfo("assignee not set in redmine ticket, skipping");
             return null;
         }
 
         if (userHashMap.containsKey(redmineIssue.getAssigneeId())) {
             User user = userHashMap.get(redmineIssue.getAssigneeId());
-            RedLab.logInfo("found redmine assignee: " + user.getLogin() + " using assigneeId: " + redmineIssue.getAssigneeId());
+            RedLab.logger.logInfo("found redmine assignee '" + user.getLogin() + "' (" + redmineIssue.getAssigneeId() + ")");
             return user;
         }
 
-        RedLab.logInfo("unable to lookup redmine assignee: " + redmineIssue.getAssigneeId() + ", skipping.");
+        RedLab.logger.logInfo("unable to lookup redmine assignee: " + redmineIssue.getAssigneeId() + ", skipping.");
         return null;
     }
 
@@ -108,7 +115,7 @@ public class RedmineAPIWrapper {
         if (!RedLab.config.isSafeMode())
             redmineManager.getIssueManager().update(redmineIssue);
 
-        RedLab.logInfo("updated redmine issue: " + redmineIssue.getId());
+        RedLab.logger.logInfo("updated redmine issue: " + redmineIssue.getId());
     }
 
     public HashMap<Integer, User> getUserHashMap() {
@@ -118,4 +125,21 @@ public class RedmineAPIWrapper {
     public HashMap<Integer, IssueStatus> getIssueStatusHashMap() {
         return issueStatusHashMap;
     }
+
+    // workaround for bug: https://github.com/taskadapter/redmine-java-api/issues/291
+    public Date getClosedOn(Issue redmineIssue) {
+        Date closedDate = null;
+
+        for (Journal journal : redmineIssue.getJournals())
+            for (JournalDetail journalDetail : journal.getDetails())
+                if (journalDetail.getName().equals("status_id")) {
+                    IssueStatus issueStatus = issueStatusHashMap.get( Integer.parseInt(journalDetail.getNewValue()) );
+
+                    if (issueStatus != null && issueStatus.isClosed() && (closedDate == null || closedDate.before(journal.getCreatedOn())))
+                        closedDate = journal.getCreatedOn();
+                }
+
+        return closedDate;
+    }
+
 }

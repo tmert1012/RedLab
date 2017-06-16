@@ -31,8 +31,6 @@ public class GitLabAPIWrapper {
         GitlabIssue gitlabIssue;
 
         if (RedLab.config.isSafeMode()) {
-            String[] lablesList = {labels};
-
             GitlabMilestone milestone = new GitlabMilestone();
             milestone.setId(milestoneId);
 
@@ -43,7 +41,7 @@ public class GitLabAPIWrapper {
             gitlabIssue.setProjectId(projectId);
             gitlabIssue.setAssignee(user);
             gitlabIssue.setMilestone(milestone);
-            gitlabIssue.setLabels(lablesList);
+            gitlabIssue.setLabels(explodeLabels(labels));
             gitlabIssue.setDescription(description);
             gitlabIssue.setTitle(title);
 
@@ -53,19 +51,17 @@ public class GitLabAPIWrapper {
             gitlabIssue = gitlabAPI.createIssue(projectId, assigneeId, milestoneId, labels, description, title);
         }
 
-        RedLab.logInfo("added gitlab issue: '" + gitlabIssue.getTitle() + "' ("  + gitlabIssue.getId() + ")");
+        RedLab.logger.logInfo("added gitlab issue: '" + gitlabIssue.getTitle() + "' ("  + gitlabIssue.getId() + ")");
 
         return gitlabIssue;
     }
 
-    public GitlabIssue editIssue(int projectId, int issueId, int assigneeId, int milestoneId, java.lang.String labels, java.lang.String description, java.lang.String title, GitlabIssue.Action action) throws IOException {
+    public GitlabIssue editIssue(int projectId, int issueId, int assigneeId, int milestoneId, String labels, String description, String title, GitlabIssue.Action action) throws IOException {
             GitlabIssue gitlabIssue;
 
             if (RedLab.config.isSafeMode()) {
 
                 gitlabIssue = safeModeEntities.getGitlabIssue(issueId);
-
-                String[] lablesList = {labels};
 
                 GitlabMilestone milestone = new GitlabMilestone();
                 milestone.setId(milestoneId);
@@ -77,7 +73,7 @@ public class GitLabAPIWrapper {
                 gitlabIssue.setId(issueId);
                 gitlabIssue.setAssignee(user);
                 gitlabIssue.setMilestone(milestone);
-                gitlabIssue.setLabels(lablesList);
+                gitlabIssue.setLabels(explodeLabels(labels));
                 gitlabIssue.setDescription(description);
                 gitlabIssue.setTitle(title);
 
@@ -86,7 +82,7 @@ public class GitLabAPIWrapper {
                 gitlabIssue = gitlabAPI.editIssue(projectId, issueId, assigneeId, milestoneId, labels, description, title, action);
             }
 
-            RedLab.logInfo("updated gitlab issue: '" + gitlabIssue.getTitle() + "' ("  + gitlabIssue.getId() + ")");
+            RedLab.logger.logInfo("updated gitlab issue: '" + gitlabIssue.getTitle() + "' ("  + gitlabIssue.getId() + ")");
 
             return gitlabIssue;
     }
@@ -107,7 +103,7 @@ public class GitLabAPIWrapper {
             milestone = gitlabAPI.createMilestone(projectId, title, description, dueDate);
         }
 
-        RedLab.logInfo("added gitlab milestone: '" + milestone.getTitle() + "' (" + milestone.getId() + ")");
+        RedLab.logger.logInfo("added gitlab milestone: '" + milestone.getTitle() + "' (" + milestone.getId() + ")");
 
         return milestone;
     }
@@ -125,7 +121,7 @@ public class GitLabAPIWrapper {
             gitlabNote = gitlabAPI.createNote(gitlabIssue, message);
         }
 
-        RedLab.logInfo("added gitlab note. ("  + gitlabNote.getId() + ")");
+        RedLab.logger.logInfo("added gitlab note. ("  + gitlabNote.getId() + ")");
 
         return gitlabNote;
     }
@@ -135,12 +131,12 @@ public class GitLabAPIWrapper {
         for (GitlabProject project : projects) {
 
             if (project.getName().equals(gitLabKey) || project.getPathWithNamespace().equals(gitLabKey)) {
-                RedLab.logInfo("found gitlab project '" + project.getName() + "' with '" + gitLabKey + "'");
+                RedLab.logger.logInfo("found gitlab project '" + project.getName() + "'");
                 return project;
             }
         }
 
-        RedLab.logInfo("unable to lookup gitlab project from key: " + gitLabKey);
+        RedLab.logger.logInfo("unable to lookup gitlab project from key: " + gitLabKey);
         return null;
 
     }
@@ -153,12 +149,12 @@ public class GitLabAPIWrapper {
 
         for (GitlabUser gitlabUser : users) {
             if (gitlabUser.getUsername().equals(RedLab.config.getGitLabOptions().getDefaultAssigneeUsername()) ) {
-                RedLab.logInfo("found gitlab default assignee: " + gitlabUser.getUsername());
+                RedLab.logger.logInfo("found gitlab default assignee '" + gitlabUser.getUsername() + "'");
                 return gitlabUser;
             }
         }
 
-        RedLab.logInfo("unable to lookup gitlab default assignee: " + RedLab.config.getGitLabOptions().getDefaultAssigneeUsername());
+        RedLab.logger.logInfo("unable to lookup gitlab default assignee with '" + RedLab.config.getGitLabOptions().getDefaultAssigneeUsername() + "'");
         return null;
     }
 
@@ -207,6 +203,27 @@ public class GitLabAPIWrapper {
             map.put(issue.getTitle(), issue);
 
         return map;
+    }
+
+
+    public String[] explodeLabels(String labels) {
+
+        if (labels.contains(","))
+            return labels.split(",");
+        else {
+            String[] labelList = {labels};
+            return labelList;
+        }
+
+    }
+
+    public String implodeLabels(String[] labels) {
+        String labelStr = "";
+
+        for (String label : labels)
+            labelStr += label + ",";
+
+        return labelStr.replaceAll(",$", "");
     }
 
 }
