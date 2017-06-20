@@ -10,9 +10,7 @@ import org.gitlab.api.models.*;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -137,7 +135,7 @@ public class Migrate {
             }
             // error, version wasn't previously imported
             else {
-                RedLab.logger.logInfo("unable to lookup version as milestone in gitlab: " + redmineIssue.getTargetVersion().getName() + ", not adding issue.");
+                RedLab.logger.logError("unable to lookup version as milestone in gitlab: " + redmineIssue.getTargetVersion().getName() + ", not adding issue.");
                 throw new Exception();
             }
         }
@@ -188,11 +186,11 @@ public class Migrate {
 
         }
 
-        // update gitlab issue as closed, if redmine ticket is closed
-        setGitlabIssueClosed(redmineIssue, gitlabIssue);
-
         // migrate notes for this issue
         migrateNotes(redmineIssue, gitlabIssue);
+
+        // update gitlab issue as closed, if redmine ticket is closed
+        setGitlabIssueClosed(redmineIssue, gitlabIssue);
 
         // close redmine ticket, if enabled
         closeRedmineIssue(redmineIssue, gitlabProject, gitlabIssue);
@@ -202,11 +200,18 @@ public class Migrate {
     private void setGitlabIssueClosed(Issue redmineIssue, GitlabIssue gitlabIssue) throws IOException {
 
         // close ticket in gitlab
-        IssueStatus issueStatus = redmineAPIWrapper.getIssueStatusHashMap().get(redmineIssue.getStatusId());
-        if (!issueStatus.isClosed() || gitlabIssue.getState().equals(GitlabIssue.STATE_CLOSED)) {
+        IssueStatus issueStatus = redmineAPIWrapper.getIssueStatus(redmineIssue.getStatusId());
+        if (!issueStatus.isClosed() || (gitlabIssue.getState() != null && gitlabIssue.getState().equals(GitlabIssue.STATE_CLOSED))) {
             RedLab.logger.logInfo("redmine issue (" + redmineIssue.getId() + ") isn't closed or gitlab issue (" + gitlabIssue.getId() + ") is already closed, skipping gitlab issue close.");
             return;
         }
+
+        // submit closed note
+        Date closedDate = redmineAPIWrapper.getClosedOn(redmineIssue);
+        gitLabAPIWrapper.createNote(
+                gitlabIssue,
+                "Closed On: " + (closedDate == null ? "null" : sdf.format(closedDate))
+        );
 
         // set issue closed
         gitLabAPIWrapper.editIssue(
@@ -219,22 +224,28 @@ public class Migrate {
                 gitlabIssue.getTitle(),
                 GitlabIssue.Action.CLOSE);
 
-        // submit closed note
-        Date closedDate = redmineAPIWrapper.getClosedOn(redmineIssue);
-        gitLabAPIWrapper.createNote(
-                gitlabIssue,
-                "Closed On: " + (closedDate == null ? "null" : sdf.format(closedDate))
-        );
-
     }
 
     private void migrateNotes(Issue redmineIssue, GitlabIssue gitlabIssue) throws IOException {
         HashMap<String, GitlabNote> existingNotes = getRedmineNotesAlreadyMigratedHashMap(gitlabIssue);
 
+        // sort list to preserve created order
+        ArrayList<Journal> journals = new ArrayList<Journal>();
+        journals.addAll(redmineIssue.getJournals());
+
+        Collections.sort(journals, new Comparator<Journal>() {
+
+            @Override
+            public int compare(Journal o1, Journal o2) {
+                return o1.getCreatedOn().compareTo(o2.getCreatedOn());
+            }
+
+        });
+
         // journals -> notes
         String message = null;
         String journalDetails = null;
-        for (Journal journal: redmineIssue.getJournals()) {
+        for (Journal journal: journals) {
 
             RedLab.logger.logInfo("processing journal (" + journal.getId() + ")");
 
@@ -250,8 +261,8 @@ public class Migrate {
             // create message with additional redmine info, for good historical data
             message =
                     "Updated by " + journal.getUser().getFullName() + " on " + (journal.getCreatedOn() == null ? "N/A" : sdf.format(journal.getCreatedOn())) + "\n\n" +
-                    (journalDetails.equals("") ? "" : journalDetails + "\n\n") +
-                    (journal.getNotes().equals("") ? "" : journal.getNotes() + "\n\n") +
+                    (journalDetails == null || journalDetails.equals("") ? "" : journalDetails + "\n\n") +
+                    (journal.getNotes() == null || journal.getNotes().equals("") ? "" : journal.getNotes() + "\n\n") +
                     "journal id: " + journal.getId();
 
             // submit note
@@ -274,17 +285,32 @@ public class Migrate {
 
             switch (jd.getName()) {
                 case "assigned_to_id":
-                    User oldUser = redmineAPIWrapper.getUserHashMap().get( Integer.parseInt(jd.getOldValue()) );
-                    User newUser = redmineAPIWrapper.getUserHashMap().get( Integer.parseInt(jd.getNewValue()) );
-                    journalDetails += "Assignee updated from " + (oldUser == null ? "Unassigned" : oldUser.getFullName()) + " to " + (newUser == null ? "Unassigned" : newUser.getFullName());
+                    User oldUser = redmineAPIWrapper.getUser(jd.getOldValue());
+                    User newUser = redmineAPIWrapper.getUser(jd.getNewValue());
+                    journalDetails += "**assignee** updated from *" + (oldUser == null ? "Unassigned" : oldUser.getFullName()) + "* to *" + (newUser == null ? "Unassigned" : newUser.getFullName()) + "*";
                     break;
                 case "status_id":
-                    IssueStatus oldStatus = redmineAPIWrapper.getIssueStatusHashMap().get( Integer.parseInt(jd.getOldValue()) );
-                    IssueStatus newStatus = redmineAPIWrapper.getIssueStatusHashMap().get( Integer.parseInt(jd.getNewValue()) );
-                    journalDetails += "Status changed from " + (oldStatus == null ? "Not Set" : oldStatus.getName()) + " to " + (newStatus == null ? "Not Set" : newStatus.getName());
+                    IssueStatus oldStatus = redmineAPIWrapper.getIssueStatus(jd.getOldValue());
+                    IssueStatus newStatus = redmineAPIWrapper.getIssueStatus(jd.getNewValue());
+                    journalDetails += "**status** changed from *" + (oldStatus == null ? "Not Set" : oldStatus.getName()) + "* to *" + (newStatus == null ? "Not Set" : newStatus.getName()) + "*";
+                    break;
+                case "project_id":
+                    Project oldProject = redmineAPIWrapper.getProjectById(jd.getOldValue());
+                    Project newProject = redmineAPIWrapper.getProjectById(jd.getNewValue());
+                    journalDetails += "**project** changed from *" + (oldProject == null ? "Not Set" : oldProject.getName()) + "* to *" + (newProject == null ? "Not Set" : newProject.getName()) + "*";
+                    break;
+                case "tracker_id":
+                    Tracker oldTracker = redmineAPIWrapper.getTracker(jd.getOldValue());
+                    Tracker newTracker = redmineAPIWrapper.getTracker(jd.getNewValue());
+                    journalDetails += "**tracker** changed from *" + (oldTracker == null ? "Not Set" : oldTracker.getName()) + "* to *" + (newTracker == null ? "Not Set" : newTracker.getName()) + "*";
+                    break;
+                case "priority_id":
+                    IssuePriority oldPriority = redmineAPIWrapper.getIssuePriority(jd.getOldValue());
+                    IssuePriority newPriority = redmineAPIWrapper.getIssuePriority(jd.getNewValue());
+                    journalDetails += "**priority** changed from *" + (oldPriority == null ? "Not Set" : oldPriority.getName()) + "* to *" + (newPriority == null ? "Not Set" : newPriority.getName()) + "*";
                     break;
                 default:
-                    journalDetails += jd.getName() + " was changed from " + jd.getOldValue() + " to " + jd.getNewValue();
+                    journalDetails += "**" + jd.getName() + "** was changed from *" + jd.getOldValue() + "* to *" + jd.getNewValue() + "*";
 
             }
 
@@ -336,7 +362,7 @@ public class Migrate {
             }
         }
 
-        RedLab.logger.logInfo("unable to map redmine->gitlab user: " + redmineAssignee.getLogin() + ", defaulting.");
+        RedLab.logger.logError("unable to map redmine->gitlab user: " + redmineAssignee.getLogin() + ", defaulting.");
         return gitLabAPIWrapper.getDefaultAssignee();
 
     }

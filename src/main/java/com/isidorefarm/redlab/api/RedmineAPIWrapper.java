@@ -22,6 +22,8 @@ public class RedmineAPIWrapper {
     private List<Project> projects;
     private HashMap<Integer, User> userHashMap;
     private HashMap<Integer, IssueStatus> issueStatusHashMap;
+    private HashMap<Integer, Tracker> trackerHashMap;
+    private HashMap<Integer, IssuePriority> issuePriorityHashMap;
 
 
     public RedmineAPIWrapper() throws RedmineException {
@@ -41,6 +43,13 @@ public class RedmineAPIWrapper {
             issueStatusHashMap.put(issueStatus.getId(), issueStatus);
         }
 
+        trackerHashMap = new HashMap<Integer, Tracker>();
+        for (Tracker tracker : redmineManager.getIssueManager().getTrackers()) {
+            if (RedLab.config.isDebugMode()) RedLab.logger.logInfo("adding tracker: " + tracker.getId() + ", " + tracker.getName());
+            trackerHashMap.put(tracker.getId(), tracker);
+        }
+
+        issuePriorityHashMap = new HashMap<Integer, IssuePriority>();
     }
 
     public List<Version> getVersions(int projectID) throws RedmineException {
@@ -55,6 +64,7 @@ public class RedmineAPIWrapper {
         params.put("status_id", "*");
         params.put("offset", "0");
         params.put("limit", Integer.toString(LIMIT));
+        params.put("sort", "created");
 
         Integer issueCount = null;
         int callCount = 1;
@@ -73,11 +83,32 @@ public class RedmineAPIWrapper {
 
         }
 
+        updateIssuePriorityHashMap(issues);
+
         return issues;
     }
 
+    // save all issue priorities in map for reference later. workaround since /enumerations/issue_priorities.json returns a 404.
+    private void updateIssuePriorityHashMap(List<Issue> issues) {
+        IssuePriority issuePriority = null;
+
+        for (Issue issue : issues) {
+
+            // set issue priority if we don't have it
+            if (!issuePriorityHashMap.containsKey(issue.getPriorityId())) {
+                issuePriority = IssuePriorityFactory.create(issue.getPriorityId());
+                issuePriority.setName(issue.getPriorityText());
+
+                if (RedLab.config.isDebugMode()) RedLab.logger.logInfo("adding issue priority: " + issuePriority.getId() + ", " + issuePriority.getName());
+                issuePriorityHashMap.put(issue.getPriorityId(), issuePriority);
+            }
+
+        }
+
+    }
+
     public Issue getIssueById(int issueId) throws RedmineException {
-        return redmineManager.getIssueManager().getIssueById(issueId, Include.journals, Include.relations, Include.changesets, Include.watchers);
+        return redmineManager.getIssueManager().getIssueById(issueId, Include.journals, Include.relations, Include.changesets, Include.watchers, Include.attachments);
     }
 
     public Project getProjectByKey(String projectKey) {
@@ -88,14 +119,29 @@ public class RedmineAPIWrapper {
                 return project;
             }
 
-        RedLab.logger.logInfo("unable to lookup redmine project by projectKey: " + projectKey + ", skipping.");
+        RedLab.logger.logError("unable to lookup redmine project by projectKey: " + projectKey + ", skipping.");
+        return null;
+    }
+
+    public Project getProjectById(String projectId) {
+        if (projectId == null || projectId.equals(""))
+            return null;
+
+        return getProjectById( Integer.parseInt(projectId) );
+    }
+
+    public Project getProjectById(int projectId) {
+        for (Project project : projects)
+            if (project.getId() == projectId)
+                return project;
+
         return null;
     }
 
     public User getAssignee(Issue redmineIssue) {
 
         // assignee not set in ticket
-        if (redmineIssue == null) {
+        if (redmineIssue.getAssigneeId() == null) {
             RedLab.logger.logInfo("assignee not set in redmine ticket, skipping");
             return null;
         }
@@ -106,7 +152,7 @@ public class RedmineAPIWrapper {
             return user;
         }
 
-        RedLab.logger.logInfo("unable to lookup redmine assignee: " + redmineIssue.getAssigneeId() + ", skipping.");
+        RedLab.logger.logError("unable to lookup redmine assignee: " + redmineIssue.getAssigneeId() + ", skipping.");
         return null;
     }
 
@@ -118,12 +164,26 @@ public class RedmineAPIWrapper {
         RedLab.logger.logInfo("updated redmine issue: " + redmineIssue.getId());
     }
 
-    public HashMap<Integer, User> getUserHashMap() {
-        return userHashMap;
+    public User getUser(String userId) {
+        if (userId == null || userId.equals(""))
+            return null;
+
+        return getUser( Integer.parseInt(userId) );
     }
 
-    public HashMap<Integer, IssueStatus> getIssueStatusHashMap() {
-        return issueStatusHashMap;
+    public User getUser(int userId) {
+        return userHashMap.get(userId);
+    }
+
+    public IssueStatus getIssueStatus(String statusId) {
+        if (statusId == null || statusId.equals(""))
+            return null;
+
+        return getIssueStatus( Integer.parseInt(statusId) );
+    }
+
+    public IssueStatus getIssueStatus(int statusId) {
+        return issueStatusHashMap.get(statusId);
     }
 
     // workaround for bug: https://github.com/taskadapter/redmine-java-api/issues/291
@@ -140,6 +200,28 @@ public class RedmineAPIWrapper {
                 }
 
         return closedDate;
+    }
+
+    public Tracker getTracker(String trackerId) {
+        if (trackerId == null || trackerId.equals(""))
+            return null;
+
+        return getTracker( Integer.parseInt(trackerId) );
+    }
+
+    public Tracker getTracker(int trackerId) {
+        return trackerHashMap.get(trackerId);
+    }
+
+    public IssuePriority getIssuePriority(String priorityId) {
+        if (priorityId == null || priorityId.equals(""))
+            return null;
+
+        return getIssuePriority( Integer.parseInt(priorityId) );
+    }
+
+    public IssuePriority getIssuePriority(int priorityId) {
+        return issuePriorityHashMap.get(priorityId);
     }
 
 }

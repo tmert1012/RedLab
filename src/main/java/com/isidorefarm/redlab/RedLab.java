@@ -17,15 +17,24 @@ public class RedLab extends CommandLineProject {
             config = Config.load();
             logger = new Logger();
 
+
             // just dump config and bail
             if (haveGoodArg("checkConfig")) {
                 logger.logInfo(config.toString());
                 return;
             }
 
+            // give attachment overview summary. shows counts by filename. good for spotting files to ignore, such as email footer images.
+            else if (haveGoodArg("attachmentOverview")) {
+                AttachmentOverview ao = new AttachmentOverview();
+                ao.run();
+            }
+
             // run migration
-            Migrate migrate = new Migrate();
-            migrate.run();
+            else {
+                Migrate migrate = new Migrate();
+                migrate.run();
+            }
 
         } catch (Exception e) {
             e.printStackTrace();

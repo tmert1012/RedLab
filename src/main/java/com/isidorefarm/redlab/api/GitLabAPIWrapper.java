@@ -136,7 +136,7 @@ public class GitLabAPIWrapper {
             }
         }
 
-        RedLab.logger.logInfo("unable to lookup gitlab project from key: " + gitLabKey);
+        RedLab.logger.logError("unable to lookup gitlab project from key: " + gitLabKey);
         return null;
 
     }
@@ -154,7 +154,7 @@ public class GitLabAPIWrapper {
             }
         }
 
-        RedLab.logger.logInfo("unable to lookup gitlab default assignee with '" + RedLab.config.getGitLabOptions().getDefaultAssigneeUsername() + "'");
+        RedLab.logger.logError("unable to lookup gitlab default assignee with '" + RedLab.config.getGitLabOptions().getDefaultAssigneeUsername() + "'");
         return null;
     }
 

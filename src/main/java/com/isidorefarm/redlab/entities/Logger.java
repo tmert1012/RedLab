@@ -15,6 +15,7 @@ public class Logger {
     private final static String DEFAULT_LOG_KEY = "redlab";
 
     private HashMap<String, FileWriter> logFileHashMap;
+    private HashMap<String, FileWriter> errorFileHashMap;
     private String currentRedmineProjectKey; // which project is currently being processed, optional
 
     public Logger() throws IOException {
@@ -24,6 +25,7 @@ public class Logger {
     private void init() throws IOException {
         currentRedmineProjectKey = null;
         logFileHashMap = new HashMap<String, FileWriter>();
+        errorFileHashMap = new HashMap<String, FileWriter>();
 
         // create log dir
         File baseLogDir = new File(LOG_DIR);
@@ -32,6 +34,7 @@ public class Logger {
 
         // add default
         logFileHashMap.put(DEFAULT_LOG_KEY, new FileWriter(new File(LOG_DIR + File.separator + DEFAULT_LOG_KEY + ".log")));
+        errorFileHashMap.put(DEFAULT_LOG_KEY, new FileWriter(new File(LOG_DIR + File.separator + DEFAULT_LOG_KEY + ".errors.log")));
 
         // set log file for each project
         for (ProjectMap projectMap : RedLab.config.getProjectMapList()) {
@@ -40,21 +43,47 @@ public class Logger {
                     projectMap.getRedmineKey(),
                     new FileWriter(new File(LOG_DIR + File.separator + projectMap.getRedmineKey().trim().toLowerCase() + ".log"))
             );
+
+            errorFileHashMap.put(
+                    projectMap.getRedmineKey(),
+                    new FileWriter(new File(LOG_DIR + File.separator + projectMap.getRedmineKey().trim().toLowerCase() + ".errors.log"))
+            );
         }
 
     }
 
     public void closeLogging() {
-        FileWriter fw = null;
+        FileWriter logfw = null;
+        FileWriter errorfw = null;
 
-        // set log file for each project
+        // close both files for each project
         for (ProjectMap projectMap : RedLab.config.getProjectMapList()) {
-            fw = logFileHashMap.get(projectMap.getRedmineKey());
+            logfw = logFileHashMap.get(projectMap.getRedmineKey());
+            errorfw = errorFileHashMap.get(projectMap.getRedmineKey());
 
-            if (fw != null)
-                try { fw.close(); } catch (IOException e) {}
+            if (logfw != null)
+                try { logfw.close(); } catch (IOException e) {}
+
+            if (errorfw != null)
+                try { errorfw.close(); } catch (IOException e) {}
         }
 
+    }
+
+    public void logError(String msg) {
+
+        try {
+
+            if (errorFileHashMap.containsKey(currentRedmineProjectKey))
+                errorFileHashMap.get(currentRedmineProjectKey).write(msg + System.lineSeparator());
+            else
+                errorFileHashMap.get(DEFAULT_LOG_KEY).write(msg + System.lineSeparator());
+
+            logInfo(msg);
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     public void logInfo(String msg) {
