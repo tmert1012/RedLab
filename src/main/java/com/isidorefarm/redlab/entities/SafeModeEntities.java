@@ -20,6 +20,12 @@ public class SafeModeEntities {
         notesHashMap = new HashMap<Integer, ArrayList<GitlabNote>>();
     }
 
+    public void reset() {
+        gitlabIssues.clear();
+        milestoneHashMap.clear();
+        notesHashMap.clear();
+    }
+
     public void addGitlabIssue(GitlabIssue issue) {
 
         // set fake id

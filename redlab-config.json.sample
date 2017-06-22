@@ -1,0 +1,25 @@
+{
+
+  // no changes to redmine or gitlab. run in safemode on at least one project
+  "safeMode": true,
+  "debugMode": true,
+
+  "redmineOptions": {
+    "apiKey": "xxxx",
+    "baseURL": "https://redmine.mycompany.com", // no trailing slash
+    "autoCloseRedmineIssues": false, // have redlab auto note and close your redmine tickets
+    "autoCloseStatusId": 0 // statusId redmine tickets will have if autoclose enabled. suggest using a "migrated" status.
+  },
+
+  "gitLabOptions": {
+    "apiKey": "xxxx",
+    "baseURL": "https://gitlab.mycompany.com", // no trailing slash
+    "defaultAssigneeUsername": "root" // if a assigned user doesn't exist in gitlab, will use this user as default
+  },
+
+  "projectMapList": [
+    {"redmineKey": "proj1", "gitlabGroup": "myprojects", "gitlabProject": "projectOne"},
+    {"redmineKey": "proj2", "gitlabGroup": "myprojects", "gitlabProject": "projectTwo"}
+  ]
+
+}

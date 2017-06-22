@@ -2,29 +2,49 @@ package com.isidorefarm.redlab.api;
 
 
 import com.isidorefarm.redlab.RedLab;
+import com.isidorefarm.redlab.config.ProjectMap;
 import com.isidorefarm.redlab.entities.SafeModeEntities;
 import org.gitlab.api.GitlabAPI;
+import org.gitlab.api.http.Query;
 import org.gitlab.api.models.*;
 
 import java.io.IOException;
-import java.util.Date;
-import java.util.HashMap;
+import java.io.Serializable;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
+import java.util.ArrayList;
 import java.util.List;
 
 public class GitLabAPIWrapper {
 
     private GitlabAPI gitlabAPI;
-    private List<GitlabProject> projects;
-    private List<GitlabUser> users;
     private SafeModeEntities safeModeEntities; // for safe mode only
+    private GitlabUser defaultAssignee;
 
 
     public GitLabAPIWrapper() throws IOException {
         gitlabAPI = GitlabAPI.connect(RedLab.config.getGitLabOptions().getBaseURL(), RedLab.config.getGitLabOptions().getApiKey());
-
-        projects = gitlabAPI.getProjects();
-        users = gitlabAPI.getUsers();
         safeModeEntities = new SafeModeEntities();
+        setDefaultAssignee();
+    }
+
+    private void setDefaultAssignee() throws IOException {
+        defaultAssignee = null;
+        List<GitlabUser> users = gitlabAPI.findUsers(RedLab.config.getGitLabOptions().getDefaultAssigneeUsername());
+
+        for (GitlabUser user : users) {
+            if (user.getUsername().equals(RedLab.config.getGitLabOptions().getDefaultAssigneeUsername())) {
+                defaultAssignee = user;
+                RedLab.logger.logInfo("found gitlab default assignee '" + defaultAssignee.getUsername() + "'");
+            }
+        }
+        if (defaultAssignee == null)
+            RedLab.logger.logError("unable to lookup gitlab default assignee with '" + RedLab.config.getGitLabOptions().getDefaultAssigneeUsername() + "'");
+
+    }
+
+    public GitlabUser getDefaultAssignee() {
+        return defaultAssignee;
     }
 
     public GitlabIssue createIssue(int projectId, int assigneeId, int milestoneId, String labels, String description, String title) throws IOException {
@@ -87,21 +107,12 @@ public class GitLabAPIWrapper {
             return gitlabIssue;
     }
 
-    public GitlabMilestone createMilestone(int projectId, String title, String description, Date dueDate) throws IOException {
-        GitlabMilestone milestone;
+    public GitlabMilestone createMilestone(int projectId, GitlabMilestone milestone) throws IOException {
 
-        if (RedLab.config.isSafeMode()) {
-            milestone = new GitlabMilestone();
-            milestone.setProjectId(projectId);
-            milestone.setTitle(title);
-            milestone.setDescription(description);
-            milestone.setDueDate(dueDate);
-
+        if (RedLab.config.isSafeMode())
             safeModeEntities.addGitlabMileStone(milestone);
-        }
-        else {
-            milestone = gitlabAPI.createMilestone(projectId, title, description, dueDate);
-        }
+        else
+            milestone = gitlabAPI.createMilestone(projectId, milestone);
 
         RedLab.logger.logInfo("added gitlab milestone: '" + milestone.getTitle() + "' (" + milestone.getId() + ")");
 
@@ -126,85 +137,96 @@ public class GitLabAPIWrapper {
         return gitlabNote;
     }
 
-    public GitlabProject getProjectByKey(String gitLabKey) {
+    public GitlabProject getProject(ProjectMap projectMap) throws UnsupportedEncodingException {
+        ArrayList<GitlabProject> projects = new ArrayList<GitlabProject>();
 
+        Query query = new Query();
+        query.append("search", projectMap.getGitlabProject());
+
+        String tailUrl = GitlabProject.URL + query.toString();
+
+        projects.addAll(gitlabAPI.retrieve().getAll(tailUrl, GitlabProject[].class));
+
+        // check results
         for (GitlabProject project : projects) {
 
-            if (project.getName().equals(gitLabKey) || project.getPathWithNamespace().equals(gitLabKey)) {
+            if (project.getPathWithNamespace().equals(projectMap.getGitlabGroup() + "/" + projectMap.getGitlabProject())) {
                 RedLab.logger.logInfo("found gitlab project '" + project.getName() + "'");
                 return project;
             }
         }
 
-        RedLab.logger.logError("unable to lookup gitlab project from key: " + gitLabKey);
+        RedLab.logger.logError("unable to lookup gitlab project: " + projectMap.getGitlabProject());
         return null;
 
     }
 
-    public List<GitlabUser> getUsers() {
-        return users;
+    public List<GitlabUser> findUser(String emailOrUsername) throws IOException {
+        return gitlabAPI.findUsers(emailOrUsername);
     }
 
-    public GitlabUser getDefaultAssignee() {
+    public List<GitlabNote> getNotes(GitlabIssue gitlabIssue) throws IOException {
+        ArrayList<GitlabNote> notes = new ArrayList<GitlabNote>();
 
-        for (GitlabUser gitlabUser : users) {
-            if (gitlabUser.getUsername().equals(RedLab.config.getGitLabOptions().getDefaultAssigneeUsername()) ) {
-                RedLab.logger.logInfo("found gitlab default assignee '" + gitlabUser.getUsername() + "'");
-                return gitlabUser;
-            }
-        }
+        notes.addAll(safeModeEntities.getGitlabNotes(gitlabIssue.getId()));
 
-        RedLab.logger.logError("unable to lookup gitlab default assignee with '" + RedLab.config.getGitLabOptions().getDefaultAssigneeUsername() + "'");
-        return null;
+        String tailUrl =
+                GitlabProject.URL + "/" + sanitizeProjectId(gitlabIssue.getProjectId()) +
+                GitlabIssue.URL + "/" + sanitizeProjectId(gitlabIssue.getIid()) +
+                GitlabNote.URL
+                ;
+
+        notes.addAll(gitlabAPI.retrieve().getAll(tailUrl, GitlabNote[].class));
+
+        return notes;
     }
 
-    public List<GitlabMilestone> getMilestones(int projectId, boolean returnSafeModeEntities) throws IOException {
+    public GitlabMilestone getMilestoneByTitle(GitlabProject gitlabProject, String title) throws IOException {
+        ArrayList<GitlabMilestone> milestones = new ArrayList<GitlabMilestone>();
 
-        if (returnSafeModeEntities)
-            return safeModeEntities.getGitlabMilestones(projectId);
-        else
-            return gitlabAPI.getMilestones(projectId);
-    }
+        milestones.addAll(safeModeEntities.getGitlabMilestones(gitlabProject.getId()));
 
-    public List<GitlabIssue> getIssues(GitlabProject gitlabProject, boolean returnSafeModeEntities) throws IOException {
+        Query query = new Query();
+        query.append("search", title);
 
-        if (returnSafeModeEntities)
-            return safeModeEntities.getGitlabIssues();
-        else
-            return gitlabAPI.getIssues(gitlabProject);
-    }
+        String tailUrl =
+            GitlabProject.URL + "/" +
+            sanitizeProjectId(gitlabProject.getId()) +
+            GitlabMilestone.URL +
+            query.toString();
 
-    public List<GitlabNote> getNotes(GitlabIssue gitlabIssue, boolean returnSafeModeEntities) throws IOException {
+        milestones.addAll(gitlabAPI.retrieve().getAll(tailUrl, GitlabMilestone[].class));
 
-        if (returnSafeModeEntities)
-            return safeModeEntities.getGitlabNotes(gitlabIssue.getId());
-        else
-            return gitlabAPI.getNotes(gitlabIssue);
-    }
-
-    // key milestone title
-    public HashMap<String, GitlabMilestone> getMilestoneHashMap(GitlabProject gitlabProject, boolean returnSafeModeEntities) throws IOException {
-        List<GitlabMilestone> milestones = getMilestones(gitlabProject.getId(), returnSafeModeEntities);
-
-        // key is version title or milestone name
-        HashMap<String, GitlabMilestone> milestoneHashMap = new HashMap<String, GitlabMilestone>();
+        // check results
         for (GitlabMilestone milestone : milestones)
-            milestoneHashMap.put(milestone.getTitle(), milestone);
+            if (milestone.getTitle().equals(title))
+                return milestone;
 
-        return milestoneHashMap;
+        return null;
     }
 
-    // key: issue title
-    public HashMap<String, GitlabIssue> getGitlabIssueHashMap(GitlabProject gitlabProject, boolean returnSafeModeEntities) throws IOException {
-        List<GitlabIssue> issues = getIssues(gitlabProject, returnSafeModeEntities);
+    public GitlabIssue getIssueByTitle(GitlabProject gitlabProject, String title) throws IOException {
+        ArrayList<GitlabIssue> issues = new ArrayList<GitlabIssue>();
 
-        HashMap<String, GitlabIssue> map = new HashMap<String, GitlabIssue>();
+        issues.addAll(safeModeEntities.getGitlabIssues());
+
+        Query query = new Query();
+        query.append("search", title);
+
+        String tailUrl =
+            GitlabProject.URL + "/" + sanitizeProjectId(gitlabProject.getId()) +
+            GitlabIssue.URL +
+            query.toString();
+
+        issues.addAll(gitlabAPI.retrieve().getAll(tailUrl, GitlabIssue[].class));
+
+        // check results
         for (GitlabIssue issue : issues)
-            map.put(issue.getTitle(), issue);
+            if (issue.getTitle().equals(title))
+                return issue;
 
-        return map;
+        return null;
     }
-
 
     public String[] explodeLabels(String labels) {
 
@@ -224,6 +246,22 @@ public class GitLabAPIWrapper {
             labelStr += label + ",";
 
         return labelStr.replaceAll(",$", "");
+    }
+
+    private String sanitizeProjectId(Serializable projectId) {
+        if (!(projectId instanceof String) && !(projectId instanceof Number)) {
+            throw new IllegalArgumentException("projectId needs to be of type String or Number");
+        }
+
+        try {
+            return URLEncoder.encode(String.valueOf(projectId), "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException((e));
+        }
+    }
+
+    public void resetSafeModeEntities() {
+        safeModeEntities.reset();
     }
 
 }

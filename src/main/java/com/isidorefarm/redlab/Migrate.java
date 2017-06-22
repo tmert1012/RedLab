@@ -36,6 +36,8 @@ public class Migrate {
 
         // each project
         for (ProjectMap projectMap : RedLab.config.getProjectMapList()) {
+            gitLabAPIWrapper.resetSafeModeEntities(); // clear out previous project info
+
             RedLab.logger.setCurrentRedmineProjectKey(projectMap.getRedmineKey());
             RedLab.logger.logInfo("PROJECT: " + projectMap.getRedmineKey());
 
@@ -45,7 +47,7 @@ public class Migrate {
                 continue;
 
             // get gitlab project by key
-            gitlabProject = gitLabAPIWrapper.getProjectByKey(projectMap.getGitLabKey());
+            gitlabProject = gitLabAPIWrapper.getProject(projectMap);
             if (gitlabProject == null)
                 continue;
 
@@ -62,22 +64,30 @@ public class Migrate {
 
     private void migrateVersionsToMilestones(Project redmineProject, GitlabProject gitlabProject) throws RedmineException, IOException {
         List<Version> versions = redmineAPIWrapper.getVersions(redmineProject.getId());
-        HashMap<String, GitlabMilestone> milestoneHashMap = gitLabAPIWrapper.getMilestoneHashMap(gitlabProject, false);
 
         RedLab.logger.logInfo(System.lineSeparator() + "VERSIONS:");
 
         // check if version exists as a milestone, add if not
+        GitlabMilestone milestone;
         for (Version version : versions) {
+            milestone = null;
 
             RedLab.logger.logInfo("checking version exists as milestone in gitlab: '" + version.getName() + "'");
 
-            if ( !milestoneHashMap.containsKey(version.getName()) )
-                gitLabAPIWrapper.createMilestone(
-                        gitlabProject.getId(),
-                        version.getName(),
-                        version.getDescription(),
-                        version.getDueDate()
-                );
+            milestone = gitLabAPIWrapper.getMilestoneByTitle(gitlabProject, version.getName());
+
+            if (milestone == null) {
+                milestone = new GitlabMilestone();
+                milestone.setCreatedDate(version.getCreatedOn());
+                milestone.setDescription(version.getDescription());
+                milestone.setDueDate(version.getDueDate());
+                milestone.setProjectId(gitlabProject.getId());
+                milestone.setState( version.getStatus().equals("closed") ? "closed" : "active" );
+                milestone.setTitle(version.getName());
+                milestone.setUpdatedDate(version.getUpdatedOn());
+
+                gitLabAPIWrapper.createMilestone(gitlabProject.getId(), milestone);
+            }
             else
                 RedLab.logger.logInfo("milestone exists, skipping.");
         }
@@ -89,8 +99,6 @@ public class Migrate {
 
         // get all issues and milestones for project
         List<Issue> redmineIssues = redmineAPIWrapper.getIssues(redmineProject.getId());
-        HashMap<String, GitlabIssue> gitlabIssueHashMap = gitLabAPIWrapper.getGitlabIssueHashMap(gitlabProject, false);
-        HashMap<String, GitlabMilestone> milestoneHashMap = gitLabAPIWrapper.getMilestoneHashMap(gitlabProject, RedLab.config.isSafeMode());
 
         // each redmine issue
         GitlabMilestone gitlabMilestone = null;
@@ -104,13 +112,13 @@ public class Migrate {
 
             // lookup existing milestone. if redmine ticket has version but can't look it up in gitlab, error.
             try {
-                gitlabMilestone = getCorrespondingGitlabMilestone(redmineIssue, milestoneHashMap);
+                gitlabMilestone = getCorrespondingGitlabMilestone(redmineIssue, gitlabProject);
             } catch (Exception e) {
-               continue;
+                continue;
             }
 
             // check for existing issue, don't want dupe issues
-            existingGitlabIssue = getExistingGitlabIssue(redmineIssue, gitlabIssueHashMap);
+            existingGitlabIssue = getExistingGitlabIssue(gitlabProject, redmineIssue);
 
             // migrate issue and notes
             migrateIssue(redmineIssue, gitlabProject, gitlabMilestone, existingGitlabIssue);
@@ -120,7 +128,7 @@ public class Migrate {
 
     }
 
-    private GitlabMilestone getCorrespondingGitlabMilestone(Issue redmineIssue, HashMap<String, GitlabMilestone> milestoneHashMap) throws Exception {
+    private GitlabMilestone getCorrespondingGitlabMilestone(Issue redmineIssue, GitlabProject gitlabProject) throws Exception {
         GitlabMilestone gitlabMilestone = null;
 
         // issue has a target version
@@ -129,8 +137,9 @@ public class Migrate {
             RedLab.logger.logInfo("redmine issue has target version.");
 
             // get corresponding gitlab milestone
-            if (milestoneHashMap.containsKey(redmineIssue.getTargetVersion().getName())) {
-                gitlabMilestone = milestoneHashMap.get(redmineIssue.getTargetVersion().getName());
+            gitlabMilestone = gitLabAPIWrapper.getMilestoneByTitle(gitlabProject, redmineIssue.getTargetVersion().getName());
+
+            if (gitlabMilestone != null) {
                 RedLab.logger.logInfo("found corresponding gitlab milestone: " + gitlabMilestone.getTitle());
             }
             // error, version wasn't previously imported
@@ -143,15 +152,13 @@ public class Migrate {
         return gitlabMilestone;
     }
 
-    private GitlabIssue getExistingGitlabIssue(Issue redmineIssue, HashMap<String, GitlabIssue> gitlabIssueHashMap) {
-        GitlabIssue existingGitlabIssue = null;
+    private GitlabIssue getExistingGitlabIssue(GitlabProject gitlabProject, Issue redmineIssue) throws IOException {
         String issueTitle = getGitlabIssueTitle(redmineIssue);
+        GitlabIssue existingGitlabIssue = gitLabAPIWrapper.getIssueByTitle(gitlabProject, issueTitle);
 
         // lookup existing gitlab issue, if exists
-        if (gitlabIssueHashMap.containsKey(issueTitle)) {
-            existingGitlabIssue = gitlabIssueHashMap.get(issueTitle);
+        if (existingGitlabIssue != null)
             RedLab.logger.logInfo("found existing gitlab issue (" + existingGitlabIssue.getIid() + ")");
-        }
 
         return existingGitlabIssue;
     }
@@ -185,6 +192,12 @@ public class Migrate {
             );
 
         }
+
+        // add created date note
+        gitLabAPIWrapper.createNote(
+                gitlabIssue,
+                "Added by " + redmineIssue.getAuthorName() + " on " + sdf.format(redmineIssue.getCreatedOn())
+        );
 
         // migrate notes for this issue
         migrateNotes(redmineIssue, gitlabIssue);
@@ -347,29 +360,36 @@ public class Migrate {
         return "RM: " + redmineIssue.getId() + " - " + redmineIssue.getSubject();
     }
 
-    private GitlabUser lookupGitLabAssignee(User redmineAssignee) {
+    private GitlabUser lookupGitLabAssignee(User redmineAssignee) throws IOException {
 
         if (redmineAssignee == null)
             return null;
 
-        // try and match by email or usernames
-        for (GitlabUser gitlabUser : gitLabAPIWrapper.getUsers()) {
-            if (gitlabUser.getEmail().toLowerCase().equals(redmineAssignee.getMail().toLowerCase()) ||
-                    gitlabUser.getUsername().toLowerCase().equals(redmineAssignee.getLogin().toLowerCase()) ) {
+        // search
+        ArrayList<GitlabUser> users = new ArrayList<GitlabUser>();
+        users.addAll( gitLabAPIWrapper.findUser(redmineAssignee.getLogin().toLowerCase()) );
+        if (users.size() == 0)
+            users.addAll( gitLabAPIWrapper.findUser(redmineAssignee.getMail().toLowerCase()) );
 
-                RedLab.logger.logInfo("mapped assignee to gitlab assignee. '" + gitlabUser.getUsername() + "' (" + gitlabUser.getId() + ")");
-                return gitlabUser;
-            }
+
+        if (users.size() == 1) {
+            RedLab.logger.logInfo("found gitlab assignee '" + users.get(0).getUsername() + "'");
+            return users.get(0);
         }
 
-        RedLab.logger.logError("unable to map redmine->gitlab user: " + redmineAssignee.getLogin() + ", defaulting.");
+        if (users.size() > 1) {
+            RedLab.logger.logError("multiple results for gitlab assignee with (" + redmineAssignee.getLogin().toLowerCase() + " or " + redmineAssignee.getMail().toLowerCase() + "), using first result.");
+            return users.get(0);
+        }
+
+        RedLab.logger.logError("unable to map redmine->gitlab user: " + redmineAssignee.getLogin() + ", using default assignee.");
         return gitLabAPIWrapper.getDefaultAssignee();
 
     }
 
     // key: redmine journalID
     private HashMap<String, GitlabNote> getRedmineNotesAlreadyMigratedHashMap(GitlabIssue gitlabIssue) throws IOException {
-        List<GitlabNote> notes = gitLabAPIWrapper.getNotes(gitlabIssue, RedLab.config.isSafeMode());
+        List<GitlabNote> notes = gitLabAPIWrapper.getNotes(gitlabIssue);
         Pattern p = Pattern.compile("journal id: (\\d+)");
         Matcher m;
 
