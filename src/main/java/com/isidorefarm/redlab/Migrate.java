@@ -36,7 +36,10 @@ public class Migrate {
 
         // each project
         for (ProjectMap projectMap : RedLab.config.getProjectMapList()) {
-            gitLabAPIWrapper.resetSafeModeEntities(); // clear out previous project info
+
+            // clear out previous project info
+            redmineAPIWrapper.reset();
+            gitLabAPIWrapper.reset();
 
             RedLab.logger.setCurrentRedmineProjectKey(projectMap.getRedmineKey());
             RedLab.logger.logInfo("PROJECT: " + projectMap.getRedmineKey());
@@ -72,21 +75,24 @@ public class Migrate {
         for (Version version : versions) {
             milestone = null;
 
-            RedLab.logger.logInfo("checking version exists as milestone in gitlab: '" + version.getName() + "'");
+            RedLab.logger.logInfo("checking version exists as milestone in gitlab: '" + version.getName() + "', " + version.getStatus());
 
             milestone = gitLabAPIWrapper.getMilestoneByTitle(gitlabProject, version.getName());
 
             if (milestone == null) {
+                String state = version.getStatus().equals("closed") ? "close" : "activate";
+
                 milestone = new GitlabMilestone();
                 milestone.setCreatedDate(version.getCreatedOn());
                 milestone.setDescription(version.getDescription());
                 milestone.setDueDate(version.getDueDate());
                 milestone.setProjectId(gitlabProject.getId());
-                milestone.setState( version.getStatus().equals("closed") ? "closed" : "active" );
+                milestone.setState(state);
                 milestone.setTitle(version.getName());
                 milestone.setUpdatedDate(version.getUpdatedOn());
 
-                gitLabAPIWrapper.createMilestone(gitlabProject.getId(), milestone);
+                milestone = gitLabAPIWrapper.createMilestone(gitlabProject.getId(), milestone);
+                gitLabAPIWrapper.updateMilestone(milestone, state);
             }
             else
                 RedLab.logger.logInfo("milestone exists, skipping.");
@@ -321,6 +327,11 @@ public class Migrate {
                     IssuePriority oldPriority = redmineAPIWrapper.getIssuePriority(jd.getOldValue());
                     IssuePriority newPriority = redmineAPIWrapper.getIssuePriority(jd.getNewValue());
                     journalDetails += "**priority** changed from *" + (oldPriority == null ? "Not Set" : oldPriority.getName()) + "* to *" + (newPriority == null ? "Not Set" : newPriority.getName()) + "*";
+                    break;
+                case "fixed_version_id":
+                    Version oldVersion = redmineAPIWrapper.getVersion(jd.getOldValue());
+                    Version newVersion = redmineAPIWrapper.getVersion(jd.getNewValue());
+                    journalDetails += "**version** changed from *" + (oldVersion == null ? "Not Set" : oldVersion.getName()) + "* to *" + (newVersion == null ? "Not Set" : newVersion.getName()) + "*";
                     break;
                 default:
                     journalDetails += "**" + jd.getName() + "** was changed from *" + jd.getOldValue() + "* to *" + jd.getNewValue() + "*";

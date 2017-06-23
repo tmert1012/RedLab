@@ -24,6 +24,7 @@ public class RedmineAPIWrapper {
     private HashMap<Integer, IssueStatus> issueStatusHashMap;
     private HashMap<Integer, Tracker> trackerHashMap;
     private HashMap<Integer, IssuePriority> issuePriorityHashMap;
+    private List<Version> versions;
 
 
     public RedmineAPIWrapper() throws RedmineException {
@@ -50,10 +51,35 @@ public class RedmineAPIWrapper {
         }
 
         issuePriorityHashMap = new HashMap<Integer, IssuePriority>();
+        versions = null;
+    }
+
+    public void reset() {
+        versions = null;
     }
 
     public List<Version> getVersions(int projectID) throws RedmineException {
-        return redmineManager.getProjectManager().getVersions(projectID);
+
+        if (versions == null || versions.isEmpty())
+            versions = redmineManager.getProjectManager().getVersions(projectID);
+
+        return versions;
+    }
+
+    public Version getVersion(String versionID) {
+        if (versionID == null || versionID.equals(""))
+            return null;
+
+        return getVersion(Integer.parseInt(versionID));
+    }
+
+    public Version getVersion(int versionID) {
+
+        for (Version version : versions)
+            if (version.getId() == versionID)
+                return version;
+
+        return null;
     }
 
     public List<Issue> getIssues(int projectID) throws RedmineException {

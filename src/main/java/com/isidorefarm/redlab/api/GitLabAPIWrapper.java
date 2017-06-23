@@ -119,6 +119,14 @@ public class GitLabAPIWrapper {
         return milestone;
     }
 
+    public GitlabMilestone updateMilestone(GitlabMilestone milestone, String stateEvent) throws IOException {
+        if (!RedLab.config.isSafeMode())
+            milestone = gitlabAPI.updateMilestone(milestone, stateEvent);
+
+        RedLab.logger.logInfo("updated gitlab milestone status: '" + milestone.getTitle() + "' (" + stateEvent + ")");
+        return milestone;
+    }
+
     public GitlabNote createNote(GitlabIssue gitlabIssue, String message) throws IOException {
         GitlabNote gitlabNote;
 
@@ -172,7 +180,7 @@ public class GitLabAPIWrapper {
 
         String tailUrl =
                 GitlabProject.URL + "/" + sanitizeProjectId(gitlabIssue.getProjectId()) +
-                GitlabIssue.URL + "/" + sanitizeProjectId(gitlabIssue.getIid()) +
+                GitlabIssue.URL + "/" + sanitizeProjectId(gitlabIssue.getId()) +
                 GitlabNote.URL
                 ;
 
@@ -260,7 +268,7 @@ public class GitLabAPIWrapper {
         }
     }
 
-    public void resetSafeModeEntities() {
+    public void reset() {
         safeModeEntities.reset();
     }
 
